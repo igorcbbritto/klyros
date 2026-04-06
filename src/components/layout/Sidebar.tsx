@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Ticket,
   MessageSquare,
+  Cpu,
   Users,
   BookOpen,
   BarChart3,
@@ -21,6 +22,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
   { icon: Ticket, label: "Chamados", href: "/dashboard/chamados" },
   { icon: MessageSquare, label: "Atendimento", href: "/dashboard/atendimento" },
+  { icon: Cpu, label: "Equipamentos", href: "/dashboard/equipamentos" },
   { icon: Users, label: "Clientes", href: "/dashboard/clientes" },
   { icon: BookOpen, label: "Base de Conhecimento", href: "/dashboard/base-conhecimento" },
   { icon: BarChart3, label: "Relatórios", href: "/dashboard/relatorios" },
@@ -65,7 +67,7 @@ export default function Sidebar() {
       <nav className="flex-1 py-4 overflow-y-auto">
         {menuItems.map((item) => {
           const Icon = item.icon;
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+          const isActive = pathname === item.href;
           return (
             <Link
               key={item.href}

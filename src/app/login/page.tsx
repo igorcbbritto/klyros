@@ -4,7 +4,12 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Mail, Lock, Loader2 } from "lucide-react";
+import { Sparkles, Mail, Lock, Loader2 } from "lucide-react";
+
+function enterDemo() {
+  localStorage.setItem("helpdesk_demo", "true");
+  window.location.href = "/dashboard";
+}
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -139,6 +144,24 @@ export default function LoginPage() {
             ) : (
               "Entrar"
             )}
+          </button>
+
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-gray-200" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-white px-3 text-gray-400">ou</span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={enterDemo}
+            className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-medium rounded-lg transition-all flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
+          >
+            <Sparkles className="w-4 h-4" />
+            Acessar em modo demonstração
           </button>
         </form>
 

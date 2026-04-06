@@ -30,6 +30,13 @@ export default function HomePage() {
             Acessar Painel
           </Link>
           <Link
+            href="/chamado"
+            className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+          >
+            <Ticket className="w-4 h-4" />
+            Abrir Chamado
+          </Link>
+          <Link
             href="/login"
             className="px-8 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-lg backdrop-blur-sm transition-colors border border-white/20"
           >

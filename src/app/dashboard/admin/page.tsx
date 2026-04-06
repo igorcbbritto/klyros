@@ -281,6 +281,7 @@ export default function AdminPage() {
             <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               <option value="admin">Administrador</option>
               <option value="agent">Agente</option>
+              <option value="viewer">Visualizador</option>
             </select>
           </div>
           <div className="flex justify-end gap-3 pt-2">

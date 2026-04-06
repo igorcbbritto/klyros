@@ -1,4 +1,4 @@
-export type UserRole = "admin" | "agent" | "client";
+export type UserRole = "super_admin" | "admin" | "agent" | "viewer" | "client";
 
 export type TicketStatus = "open" | "in_progress" | "resolved" | "closed";
 
@@ -9,12 +9,24 @@ export type TicketCategory =
   | "billing"
   | "sales"
   | "feedback"
+  | "clinical"
+  | "building"
   | "other";
+
+export type TicketSource = "agent" | "customer" | "public_form" | "email";
+
+export type EquipmentCategory = "clinical" | "building" | "it" | "general";
+
+export type EquipmentStatus = "active" | "maintenance" | "decommissioned";
+
+export type NotificationType = "new_ticket" | "ticket_reply" | "ticket_resolved" | "system";
 
 export interface Company {
   id: string;
   name: string;
   plan: "free" | "starter" | "pro" | "enterprise";
+  expires_at: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -43,10 +55,26 @@ export interface Customer {
   updated_at: string;
 }
 
+export interface Equipment {
+  id: string;
+  company_id: string;
+  name: string;
+  serial_number: string | null;
+  brand: string | null;
+  model: string | null;
+  category: EquipmentCategory;
+  location: string | null;
+  status: EquipmentStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Ticket {
   id: string;
   company_id: string;
   customer_id: string | null;
+  equipment_id: string | null;
   created_by: string;
   assigned_to: string | null;
   subject: string;
@@ -54,9 +82,11 @@ export interface Ticket {
   status: TicketStatus;
   priority: TicketPriority;
   category: TicketCategory;
+  source: TicketSource;
   ai_suggested_response: string | null;
   ai_classification: string | null;
   ai_priority_suggestion: TicketPriority | null;
+  read_by_agent_at: string | null;
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
@@ -64,6 +94,7 @@ export interface Ticket {
   customer?: Customer;
   creator?: User;
   assignee?: User;
+  equipment?: Equipment;
 }
 
 export interface TicketMessage {
@@ -75,6 +106,18 @@ export interface TicketMessage {
   is_internal: boolean;
   created_at: string;
   sender?: User;
+}
+
+export interface Notification {
+  id: string;
+  company_id: string;
+  user_id: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  ticket_id: string | null;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface KnowledgeBaseArticle {
