@@ -64,10 +64,6 @@ const integrations = [
   },
 ];
 
-const chatLink = "https://helpdesk.pro/chat/sua-empresa";
-const widgetCode = `<script src="https://helpdesk.pro/widget.js" data-company="sua-empresa" async></script>`;
-const formEmbedCode = `<iframe src="https://helpdesk.pro/form/sua-empresa" width="100%" height="500" frameborder="0"></iframe>`;
-
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -90,6 +86,10 @@ function CopyButton({ text }: { text: string }) {
 
 export default function IntegrationsPage() {
   const [selectedIntegration, setSelectedIntegration] = useState<string | null>(null);
+
+  const chatLink = `${process.env.NEXT_PUBLIC_APP_URL || ""}/public/chat`;
+  const widgetCode = `<script src="${process.env.NEXT_PUBLIC_APP_URL || ""}/widget.js" async></script>`;
+  const formEmbedCode = `<iframe src="${process.env.NEXT_PUBLIC_APP_URL || ""}/public/form" width="100%" height="500" frameborder="0"></iframe>`;
 
   return (
     <DashboardLayout>
@@ -151,7 +151,7 @@ export default function IntegrationsPage() {
                 </div>
                 <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-sm text-blue-800">
-                    💡 <strong>Dica:</strong> Você pode personalizar a URL nas configurações do seu domínio.
+                    Este link leva ao formulário público de atendimento. Configure a URL nas variáveis de ambiente do projeto.
                   </p>
                 </div>
               </div>

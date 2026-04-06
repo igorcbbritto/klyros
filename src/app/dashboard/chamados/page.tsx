@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import Badge from "@/components/ui/Badge";
 import Modal from "@/components/ui/Modal";
+import Badge from "@/components/ui/Badge";
 import { formatDate, cn } from "@/lib/utils";
-import { mockTickets, mockCustomers, mockAgents, mockEquipments } from "@/dashboard-mocks";
-import { Ticket as TicketType } from "@/types";
+import { Ticket as TicketType, Customer, Equipment } from "@/types";
 import {
   PlusCircle,
   Search,
@@ -14,6 +13,7 @@ import {
   Eye,
 } from "lucide-react";
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
 type TabType = "all" | "open" | "in_progress" | "resolved" | "closed";
@@ -30,8 +30,31 @@ export default function TicketsPage() {
   const [activeTab, setActiveTab] = useState<TabType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [showNewTicket, setShowNewTicket] = useState(false);
-  const [tickets] = useState<TicketType[]>(mockTickets);
+  const [tickets, setTickets] = useState<TicketType[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [equipments, setEquipments] = useState<Equipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const supabase = createClient();
+
+      const [ticketsRes, customersRes, equipmentsRes] = await Promise.all([
+        supabase.from("tickets").select("*").order("created_at", { ascending: false }),
+        supabase.from("customers").select("*").order("name"),
+        supabase.from("equipments").select("*").order("name"),
+      ]);
+
+      setTickets((ticketsRes.data as TicketType[]) || []);
+      setCustomers((customersRes.data as Customer[]) || []);
+      setEquipments((equipmentsRes.data as Equipment[]) || []);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
 
   const filteredTickets = tickets.filter((t) => {
     if (activeTab !== "all" && t.status !== activeTab) return false;
@@ -45,6 +68,57 @@ export default function TicketsPage() {
     }
     return true;
   });
+
+  const handleCreateTicket = useCallback(
+    async (formData: {
+      subject: string;
+      description: string;
+      customer_id: string;
+      priority: TicketType["priority"];
+      category: TicketType["category"];
+      equipment_id?: string;
+    }) => {
+      setSubmitting(true);
+      try {
+        const supabase = createClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        const { data, error } = await supabase
+          .from("tickets")
+          .insert({
+            subject: formData.subject,
+            description: formData.description,
+            customer_id: formData.customer_id || null,
+            created_by: user?.id || "00000000-0000-0000-0000-000000000000",
+            company_id: "00000000-0000-0000-0000-000000000001",
+            status: "open",
+            priority: formData.priority,
+            category: formData.category,
+            source: "agent",
+            equipment_id: formData.equipment_id || null,
+          })
+          .select("id")
+          .single();
+
+        if (!error && data) {
+          setShowNewTicket(false);
+          const [refreshed] = await Promise.all([
+            supabase.from("tickets").select("*").order("created_at", { ascending: false }),
+          ]);
+          if (refreshed.data) {
+            setTickets(refreshed.data as TicketType[]);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to create ticket:", err);
+      } finally {
+        setSubmitting(false);
+      }
+    },
+    []
+  );
 
   return (
     <DashboardLayout>
@@ -101,13 +175,17 @@ export default function TicketsPage() {
         </div>
 
         {/* Tickets Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          {filteredTickets.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">
-              <p className="text-lg font-medium">Nenhum chamado encontrado</p>
-              <p className="text-sm mt-1">Tente ajustar os filtros ou crie um novo chamado</p>
-            </div>
-          ) : (
+        {loading ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-16 flex items-center justify-center">
+            <p className="text-gray-400">Carregando chamados...</p>
+          </div>
+        ) : filteredTickets.length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 text-center py-16 text-gray-500">
+            <p className="text-lg font-medium">Nenhum chamado encontrado</p>
+            <p className="text-sm mt-1">Tente ajustar os filtros ou crie um novo chamado</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-100">
@@ -116,7 +194,6 @@ export default function TicketsPage() {
                     <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Assunto</th>
                     <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Status</th>
                     <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Prioridade</th>
-                    <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Responsavel</th>
                     <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Atualizado</th>
                     <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider"></th>
                   </tr>
@@ -133,9 +210,6 @@ export default function TicketsPage() {
                       </td>
                       <td className="py-3 px-5"><Badge variant="status" value={ticket.status} /></td>
                       <td className="py-3 px-5"><Badge variant="priority" value={ticket.priority} /></td>
-                      <td className="py-3 px-5 text-gray-600 text-xs">
-                        {mockAgents.find((a) => a.id === ticket.assigned_to)?.name ?? "—"}
-                      </td>
                       <td className="py-3 px-5 text-gray-500 text-xs whitespace-nowrap">{formatDate(ticket.updated_at)}</td>
                       <td className="py-3 px-5">
                         <Link
@@ -150,73 +224,163 @@ export default function TicketsPage() {
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* New Ticket Modal */}
       <Modal isOpen={showNewTicket} onClose={() => setShowNewTicket(false)} title="Novo Chamado">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            setShowNewTicket(false);
-            router.push("/dashboard/chamados");
-          }}
-          className="space-y-4"
-        >
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Assunto</label>
-            <input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="Descreva o assunto do chamado" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-              <option value="">Selecione um cliente</option>
-              {mockCustomers.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                <option value="low">Baixa</option>
-                <option value="medium">Media</option>
-                <option value="high">Alta</option>
-                <option value="urgent">Urgente</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                <option value="technical">Tecnico</option>
-                <option value="billing">Financeiro</option>
-                <option value="sales">Vendas</option>
-                <option value="feedback">Feedback</option>
-                <option value="other">Outro</option>
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Equipamento</label>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-              <option value="">Sem equipamento vinculado</option>
-              {mockEquipments.map((eq) => (
-                <option key={eq.id} value={eq.id}>{eq.name} — {eq.location}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
-            <textarea required rows={4} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none" placeholder="Descreva o problema ou solicitacao em detalhes..." />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowNewTicket(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
-            <button type="submit" className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">Criar Chamado</button>
-          </div>
-        </form>
+        <NewTicketForm
+          customers={customers}
+          equipments={equipments}
+          onSubmit={handleCreateTicket}
+          submitting={submitting}
+          onCancel={() => setShowNewTicket(false)}
+        />
       </Modal>
     </DashboardLayout>
+  );
+}
+
+function NewTicketForm({
+  customers,
+  equipments,
+  onSubmit,
+  submitting,
+  onCancel,
+}: {
+  customers: Customer[];
+  equipments: Equipment[];
+  onSubmit: (data: {
+    subject: string;
+    description: string;
+    customer_id: string;
+    priority: TicketType["priority"];
+    category: TicketType["category"];
+    equipment_id?: string;
+  }) => void;
+  submitting: boolean;
+  onCancel: () => void;
+}) {
+  const [subject, setSubject] = useState("");
+  const [description, setDescription] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const [priority, setPriority] = useState<TicketType["priority"]>("medium");
+  const [category, setCategory] = useState<TicketType["category"]>("technical");
+  const [equipmentId, setEquipmentId] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!subject.trim() || !description.trim()) return;
+    onSubmit({
+      subject,
+      description,
+      customer_id: customerId,
+      priority,
+      category,
+      equipment_id: equipmentId || undefined,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Assunto</label>
+        <input
+          type="text"
+          value={subject}
+          onChange={(e) => setSubject(e.target.value)}
+          required
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          placeholder="Descreva o assunto do chamado"
+        />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+        <select
+          value={customerId}
+          onChange={(e) => setCustomerId(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">Selecione um cliente</option>
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Prioridade</label>
+          <select
+            value={priority}
+            onChange={(e) => setPriority(e.target.value as TicketType["priority"])}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="low">Baixa</option>
+            <option value="medium">Média</option>
+            <option value="high">Alta</option>
+            <option value="urgent">Urgente</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as TicketType["category"])}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="technical">Técnico</option>
+            <option value="billing">Financeiro</option>
+            <option value="sales">Vendas</option>
+            <option value="feedback">Feedback</option>
+            <option value="other">Outro</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Equipamento</label>
+        <select
+          value={equipmentId}
+          onChange={(e) => setEquipmentId(e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        >
+          <option value="">Sem equipamento vinculado</option>
+          {equipments.map((eq) => (
+            <option key={eq.id} value={eq.id}>
+              {eq.name} — {eq.location || "Sem local"}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+        <textarea
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          required
+          rows={4}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+          placeholder="Descreva o problema ou solicitação em detalhes..."
+        />
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+        >
+          {submitting ? "Criando..." : "Criar Chamado"}
+        </button>
+      </div>
+    </form>
   );
 }

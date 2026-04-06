@@ -1,81 +1,123 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Badge from "@/components/ui/Badge";
 import { formatDate, cn } from "@/lib/utils";
-import { mockTickets, mockCustomers, mockAgents } from "@/dashboard-mocks";
-import { TicketMessage } from "@/types";
+import { Ticket, TicketMessage, User, Customer } from "@/types";
 import {
   ArrowLeft,
   Send,
   Clock,
-  User,
+  User as UserIcon,
   Tag,
   Bot,
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-
-const mockMessages: TicketMessage[] = [
-  {
-    id: "1",
-    ticket_id: "TK-001",
-    sender_id: "1",
-    sender_type: "client",
-    content:
-      "Olá, estou tentando acessar o sistema mas recebo erro de credenciais inválidas. Já tentei redefinir a senha mas não recebi o e-mail.",
-    is_internal: false,
-    created_at: new Date(Date.now() - 7200000).toISOString(),
-  },
-  {
-    id: "2",
-    ticket_id: "TK-001",
-    sender_id: "1",
-    sender_type: "agent",
-    content:
-      "Olá João! Vou verificar sua conta agora. Pode me confirmar o e-mail que está usando para login?",
-    is_internal: false,
-    created_at: new Date(Date.now() - 5400000).toISOString(),
-  },
-  {
-    id: "3",
-    ticket_id: "TK-001",
-    sender_id: "1",
-    sender_type: "client",
-    content: "Sim, é joao@email.com",
-    is_internal: false,
-    created_at: new Date(Date.now() - 3600000).toISOString(),
-  },
-];
+import { createClient } from "@/lib/supabase/client";
 
 export default function TicketDetailPage() {
   const params = useParams();
   const ticketId = params?.id as string;
-  const [ticket] = useState(
-    () => mockTickets.find((t) => t.id === ticketId) || mockTickets[0]
-  );
-  const [customer] = useState(
-    () => mockCustomers.find((c) => c.id === ticket.customer_id)
-  );
-  const [messages, setMessages] = useState<TicketMessage[]>(mockMessages);
-  const [newMessage, setNewMessage] = useState("");
+  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [messages, setMessages] = useState<TicketMessage[]>([]);
+  const [newMessageContent, setNewMessageContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
 
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
-    const msg: TicketMessage = {
-      id: String(Date.now()),
-      ticket_id: ticket.id,
-      sender_id: "1",
-      sender_type: "agent",
-      content: newMessage,
-      is_internal: false,
-      created_at: new Date().toISOString(),
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!ticketId) return;
+      setLoading(true);
+      const supabase = createClient();
+
+      const { data: ticketData } = await supabase
+        .from("tickets")
+        .select("*")
+        .eq("id", ticketId)
+        .single();
+
+      if (ticketData) {
+        setTicket(ticketData as Ticket);
+
+        if (ticketData.customer_id) {
+          const { data: custData } = await supabase
+            .from("customers")
+            .select("*")
+            .eq("id", ticketData.customer_id)
+            .single();
+          setCustomer((custData as Customer) || null);
+        }
+
+        const { data: msgData } = await supabase
+          .from("ticket_messages")
+          .select("*, sender:users(name)")
+          .eq("ticket_id", ticketId)
+          .order("created_at", { ascending: true });
+        setMessages((msgData as unknown as TicketMessage[]) || []);
+      }
+      setLoading(false);
     };
-    setMessages((prev) => [...prev, msg]);
-    setNewMessage("");
+    fetchData();
+  }, [ticketId]);
+
+  const handleSend = async () => {
+    if (!newMessageContent.trim() || !ticketId) return;
+    setSending(true);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      const { data, error } = await supabase
+        .from("ticket_messages")
+        .insert({
+          ticket_id: ticketId,
+          sender_id: user?.id || "00000000-0000-0000-0000-000000000000",
+          sender_type: "agent",
+          content: newMessageContent,
+          is_internal: false,
+        })
+        .select()
+        .single();
+
+      if (!error && data) {
+        setMessages((prev) => [...prev, data as TicketMessage]);
+        setNewMessageContent("");
+      }
+    } catch (err) {
+      console.error("Failed to send message:", err);
+    } finally {
+      setSending(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="animate-fadeIn flex items-center justify-center py-20">
+          <p className="text-gray-400">Carregando chamado...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!ticket) {
+    return (
+      <DashboardLayout>
+        <div className="animate-fadeIn text-center py-20">
+          <p className="text-gray-500 text-lg font-medium">Chamado não encontrado</p>
+          <Link href="/dashboard/chamados" className="text-blue-600 text-sm mt-2 inline-block">
+            Voltar para chamados
+          </Link>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -106,46 +148,52 @@ export default function TicketDetailPage() {
           >
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  className={cn(
-                    "flex gap-3",
-                    msg.sender_type === "agent" && "flex-row-reverse"
-                  )}
-                >
+              {messages.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-10">
+                  Nenhuma mensagem ainda.
+                </p>
+              ) : (
+                messages.map((msg) => (
                   <div
+                    key={msg.id}
                     className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                      msg.sender_type === "agent"
-                        ? "bg-blue-500 text-white"
-                        : "bg-gray-200 text-gray-600"
+                      "flex gap-3",
+                      msg.sender_type === "agent" && "flex-row-reverse"
                     )}
                   >
-                    <User className="w-4 h-4" />
-                  </div>
-                  <div
-                    className={cn(
-                      "max-w-[75%] rounded-xl px-4 py-2.5 text-sm",
-                      msg.sender_type === "agent"
-                        ? "bg-blue-600 text-white"
-                        : "bg-gray-100 text-gray-800"
-                    )}
-                  >
-                    <p>{msg.content}</p>
-                    <p
+                    <div
                       className={cn(
-                        "text-xs mt-1.5",
+                        "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
                         msg.sender_type === "agent"
-                          ? "text-blue-200"
-                          : "text-gray-400"
+                          ? "bg-blue-500 text-white"
+                          : "bg-gray-200 text-gray-600"
                       )}
                     >
-                      {formatDate(msg.created_at)}
-                    </p>
+                      <UserIcon className="w-4 h-4" />
+                    </div>
+                    <div
+                      className={cn(
+                        "max-w-[75%] rounded-xl px-4 py-2.5 text-sm",
+                        msg.sender_type === "agent"
+                          ? "bg-blue-600 text-white"
+                          : "bg-gray-100 text-gray-800"
+                      )}
+                    >
+                      <p>{msg.content}</p>
+                      <p
+                        className={cn(
+                          "text-xs mt-1.5",
+                          msg.sender_type === "agent"
+                            ? "text-blue-200"
+                            : "text-gray-400"
+                        )}
+                      >
+                        {formatDate(msg.created_at)}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
 
             {/* AI Suggestion */}
@@ -162,7 +210,7 @@ export default function TicketDetailPage() {
                 </div>
                 <button
                   onClick={() =>
-                    setNewMessage(ticket.ai_suggested_response ?? "")
+                    setNewMessageContent(ticket.ai_suggested_response || "")
                   }
                   className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-md transition-colors flex items-center gap-1 shrink-0"
                 >
@@ -176,15 +224,16 @@ export default function TicketDetailPage() {
             <div className="p-4 border-t border-gray-100 flex gap-3">
               <input
                 type="text"
-                value={newMessage}
-                onChange={(e) => setNewMessage(e.target.value)}
+                value={newMessageContent}
+                onChange={(e) => setNewMessageContent(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSend()}
                 placeholder="Digite sua resposta..."
                 className="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
               <button
                 onClick={handleSend}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                disabled={sending || !newMessageContent.trim()}
+                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
               >
                 <Send className="w-4 h-4" />
               </button>
@@ -200,7 +249,7 @@ export default function TicketDetailPage() {
               </h3>
               <dl className="space-y-3 text-sm">
                 <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-400" />
+                  <UserIcon className="w-4 h-4 text-gray-400" />
                   <span className="text-gray-500">Cliente:</span>
                   <span className="text-gray-900 font-medium">
                     {customer?.name ?? "—"}
@@ -218,14 +267,6 @@ export default function TicketDetailPage() {
                   <span className="text-gray-500">Categoria:</span>
                   <span className="text-gray-900 capitalize">
                     {ticket.category}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-gray-400" />
-                  <span className="text-gray-500">Responsável:</span>
-                  <span className="text-gray-900">
-                    {mockAgents.find((a) => a.id === ticket.assigned_to)?.name ??
-                      "Não atribuído"}
                   </span>
                 </div>
               </dl>
@@ -268,20 +309,86 @@ export default function TicketDetailPage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
               <h3 className="font-semibold text-gray-900 mb-3">Ações</h3>
               <div className="space-y-2">
-                <button className="w-full px-3 py-2 text-sm bg-yellow-50 text-yellow-700 hover:bg-yellow-100 rounded-lg transition-colors font-medium">
-                  Em Andamento
-                </button>
-                <button className="w-full px-3 py-2 text-sm bg-green-50 text-green-700 hover:bg-green-100 rounded-lg transition-colors font-medium">
-                  Marcar como Resolvido
-                </button>
-                <button className="w-full px-3 py-2 text-sm bg-gray-50 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors font-medium">
-                  Fechar Chamado
-                </button>
+                <StatusButton
+                  ticket={ticket}
+                  newStatus="in_progress"
+                  label="Em Andamento"
+                  colorClass="bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
+                />
+                <StatusButton
+                  ticket={ticket}
+                  newStatus="resolved"
+                  label="Marcar como Resolvido"
+                  colorClass="bg-green-50 text-green-700 hover:bg-green-100"
+                />
+                <StatusButton
+                  ticket={ticket}
+                  newStatus="closed"
+                  label="Fechar Chamado"
+                  colorClass="bg-gray-50 text-gray-600 hover:bg-gray-100"
+                />
               </div>
             </div>
           </div>
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+function StatusButton({
+  ticket,
+  newStatus,
+  label,
+  colorClass,
+}: {
+  ticket: Ticket;
+  newStatus: Ticket["status"];
+  label: string;
+  colorClass: string;
+}) {
+  const [updating, setUpdating] = useState(false);
+
+  const handleUpdate = async () => {
+    setUpdating(true);
+    try {
+      const supabase = createClient();
+      const updates: Record<string, string | null> = { status: newStatus };
+      if (newStatus === "resolved") {
+        updates.resolved_at = new Date().toISOString();
+      }
+      if (newStatus === "closed") {
+        updates.closed_at = new Date().toISOString();
+      }
+
+      await supabase.from("tickets").update(updates).eq("id", ticket.id);
+
+      const { data } = await supabase
+        .from("tickets")
+        .select("*")
+        .eq("id", ticket.id)
+        .single();
+      if (data) {
+        // Simple page-level refresh: update local state
+        window.location.reload();
+      }
+    } catch (err) {
+      console.error("Failed to update ticket:", err);
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleUpdate}
+      disabled={updating || ticket.status === newStatus}
+      className={cn(
+        "w-full px-3 py-2 text-sm rounded-lg transition-colors font-medium disabled:opacity-50",
+        colorClass
+      )}
+    >
+      {updating ? "Salvando..." : label}
+    </button>
   );
 }

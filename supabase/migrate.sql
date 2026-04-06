@@ -8,6 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- 1. Novas colunas em companies
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS expires_at TIMESTAMP WITH TIME ZONE;
 ALTER TABLE companies ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE DEFAULT gen_random_uuid();
+ALTER TABLE companies ADD COLUMN IF NOT EXISTS allow_public_chat BOOLEAN DEFAULT true;
 
 -- 2. Nova tabela equipments (antes do FK)
 CREATE TABLE IF NOT EXISTS equipments (

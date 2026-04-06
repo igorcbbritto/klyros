@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
-import { mockAgents } from "@/dashboard-mocks";
+import { User } from "@/types";
 import { cn } from "@/lib/utils";
 import {
-  PlusCircle,
+  UserPlus,
   Shield,
   Mail,
-  UserPlus,
   Settings,
   Trash2,
   Edit,
@@ -18,11 +17,42 @@ import {
   CreditCard,
   Globe,
   Database,
+  Eye,
 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 export default function AdminPage() {
+  const [users, setUsers] = useState<User[]>([]);
   const [activeTab, setActiveTab] = useState<"users" | "settings">("users");
   const [showNewUser, setShowNewUser] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      const supabase = createClient();
+      const [usersRes, sessionRes] = await Promise.all([
+        supabase.from("users").select("*").order("name"),
+        supabase.auth.getUser(),
+      ]);
+      setUsers((usersRes.data as User[]) || []);
+      setCurrentUser(sessionRes.data?.user || null);
+      setLoading(false);
+    };
+    fetchData();
+  }, []);
+
+  const handleCreateUser = async (data: {
+    name: string;
+    email: string;
+    password: string;
+    role: User["role"];
+  }) => {
+    // For now, just show a message since user creation requires auth admin API
+    console.log("Create user:", data);
+    setShowNewUser(false);
+  };
 
   return (
     <DashboardLayout>
@@ -75,63 +105,79 @@ export default function AdminPage() {
               </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-100">
-                    <tr>
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Usuário</th>
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Permissão</th>
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Status</th>
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Chamados</th>
-                      <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {mockAgents.map((agent) => (
-                      <tr key={agent.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-3 px-5">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center text-white font-bold">
-                              {agent.name.charAt(0)}
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-900">{agent.name}</p>
-                              <p className="text-xs text-gray-400 flex items-center gap-1">
-                                <Mail className="w-3 h-3" /> {agent.email}
-                              </p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-5">
-                          <Badge variant="status" value={agent.role === "admin" ? "open" : "resolved"} />
-                        </td>
-                        <td className="py-3 px-5">
-                          <span className={cn(
-                            "inline-flex items-center gap-1.5 text-xs font-medium",
-                            agent.status === "online" ? "text-green-600" : "text-gray-400"
-                          )}>
-                            <span className={cn("w-2 h-2 rounded-full", agent.status === "online" ? "bg-green-500" : "bg-gray-300")} />
-                            {agent.status === "online" ? "Online" : "Offline"}
-                          </span>
-                        </td>
-                        <td className="py-3 px-5 text-gray-600">{agent.tickets}</td>
-                        <td className="py-3 px-5">
-                          <div className="flex items-center gap-1">
-                            <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition-colors">
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors">
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {loading ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-16 flex items-center justify-center">
+                <p className="text-gray-400">Carregando usuários...</p>
               </div>
-            </div>
+            ) : users.length === 0 ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 text-center py-16 text-gray-500">
+                <p className="text-lg font-medium">Nenhum usuário encontrado</p>
+                <p className="text-sm mt-1">Crie um novo usuário para começar</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 border-b border-gray-100">
+                      <tr>
+                        <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Usuário</th>
+                        <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Permissão</th>
+                        <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Status</th>
+                        <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider">Agente</th>
+                        <th className="text-left py-3 px-5 font-medium text-gray-500 text-xs uppercase tracking-wider"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {users.map((user) => (
+                        <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-3 px-5">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-400 rounded-full flex items-center justify-center text-white font-bold">
+                                {user.name.charAt(0)}
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">{user.name}</p>
+                                <p className="text-xs text-gray-400 flex items-center gap-1">
+                                  <Mail className="w-3 h-3" /> {user.email}
+                                </p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-5">
+                            <Badge variant="status" value={user.role === "admin" ? "open" : user.role === "agent" ? "in_progress" : "resolved"} />
+                          </td>
+                          <td className="py-3 px-5">
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-green-600">
+                              <span className="w-2 h-2 rounded-full bg-green-500" />
+                              Ativo
+                            </div>
+                          </td>
+                          <td className="py-3 px-5 text-gray-600">
+                            {user.is_agent ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                                <Eye className="w-3 h-3" /> Sim
+                              </span>
+                            ) : (
+                              <span className="text-xs text-gray-400">Não</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-5">
+                            <div className="flex items-center gap-1">
+                              <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-blue-600 transition-colors">
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors">
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -151,14 +197,6 @@ export default function AdminPage() {
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1">E-mail de Contato</label>
                   <input type="email" defaultValue="contato@empresa.com" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-500 mb-1">Plano Atual</label>
-                  <div className="flex items-center gap-2">
-                    <span className="px-3 py-1 bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-700 rounded-full text-xs font-semibold border border-blue-200">
-                      Pro
-                    </span>
-                  </div>
                 </div>
                 <button className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors w-full">
                   Salvar Alterações
@@ -213,23 +251,10 @@ export default function AdminPage() {
                 <h3 className="text-base font-semibold text-gray-900">Plano e Pagamento</h3>
               </div>
               <div className="space-y-3 text-sm">
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 bg-gray-50 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-gray-900">5</p>
-                    <p className="text-xs text-gray-500">Agentes ativos</p>
-                  </div>
-                  <div className="p-3 bg-gray-50 rounded-lg text-center">
-                    <p className="text-2xl font-bold text-gray-900">∞</p>
-                    <p className="text-xs text-gray-500">Chamados ilimitados</p>
-                  </div>
-                </div>
                 <div className="p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                  <p className="text-sm text-blue-800 font-medium">Plano Pro — R$ 97,00/mês</p>
-                  <p className="text-xs text-blue-600 mt-1">Próxima cobrança: 05/05/2026</p>
+                  <p className="text-sm text-blue-800 font-medium">Gerencie sua assinatura nas configurações do Supabase</p>
+                  <p className="text-xs text-blue-600 mt-1">Configure os dados do plano no banco de dados</p>
                 </div>
-                <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors w-full">
-                  Gerenciar Assinatura
-                </button>
               </div>
             </div>
 
@@ -240,20 +265,15 @@ export default function AdminPage() {
                 <h3 className="text-base font-semibold text-gray-900">Dados do Sistema</h3>
               </div>
               <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <span className="text-gray-600">Armazenamento usado</span>
-                  <span className="font-medium text-gray-900">2.3 GB / 10 GB</span>
-                </div>
-                <div className="w-full bg-gray-100 rounded-full h-2">
-                  <div className="h-2 rounded-full bg-orange-500" style={{ width: "23%" }} />
-                </div>
-                <div className="flex gap-3">
-                  <button className="flex-1 px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition-colors">
-                    Exportar Dados
-                  </button>
-                  <button className="flex-1 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg transition-colors">
-                    Resetar
-                  </button>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+                    <p className="text-xs text-gray-500">Usuários cadastrados</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-lg text-center">
+                    <p className="text-2xl font-bold text-gray-900">—</p>
+                    <p className="text-xs text-gray-500">Chamados</p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -263,33 +283,55 @@ export default function AdminPage() {
 
       {/* New User Modal */}
       <Modal isOpen={showNewUser} onClose={() => setShowNewUser(false)} title="Novo Usuário">
-        <form onSubmit={(e) => { e.preventDefault(); setShowNewUser(false); }} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
-            <input type="text" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
-            <input type="email" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
-            <input type="password" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Permissão</label>
-            <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-              <option value="admin">Administrador</option>
-              <option value="agent">Agente</option>
-              <option value="viewer">Visualizador</option>
-            </select>
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={() => setShowNewUser(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
-            <button type="submit" className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">Criar Usuário</button>
-          </div>
-        </form>
+        <NewUserForm onSubmit={handleCreateUser} onCancel={() => setShowNewUser(false)} />
       </Modal>
     </DashboardLayout>
+  );
+}
+
+function NewUserForm({
+  onSubmit,
+  onCancel,
+}: {
+  onSubmit: (data: { name: string; email: string; password: string; role: User["role"] }) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<User["role"]>("agent");
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onSubmit({ name, email, password, role });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Nome</label>
+        <input type="text" value={name} onChange={(e) => setName(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Senha</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Permissão</label>
+        <select value={role} onChange={(e) => setRole(e.target.value as User["role"])} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+          <option value="admin">Administrador</option>
+          <option value="agent">Agente</option>
+          <option value="viewer">Visualizador</option>
+        </select>
+      </div>
+      <div className="flex justify-end gap-3 pt-2">
+        <button type="button" onClick={onCancel} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">Cancelar</button>
+        <button type="submit" className="px-6 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors">Criar Usuário</button>
+      </div>
+    </form>
   );
 }
